@@ -1,0 +1,60 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+    paths-ignore:
+      - "deploy/**"   # image tag commits from cd.yml must not re-trigger CI
+
+jobs:
+  test:
+    name: pytest (70% coverage)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements-dev.txt
+      - run: pytest --cov=. --cov-report=term-missing --cov-fail-under=70
+
+  bandit:
+    name: Bandit SAST (block on HIGH)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install bandit==1.8.0
+      - run: bandit -r app/ -l -i -x app/tests
+
+  pip-audit:
+    name: pip-audit SCA (block on critical CVE)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install pip-audit==2.7.3
+      - run: pip-audit -r app/requirements.txt
+
+  gitleaks:
+    name: Gitleaks (block on any secret)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # TODO week-2: Trivy container scan (after docker build is added)
+  # TODO week-3: Checkov IaC scan (after infra/bootstrap is added)
