@@ -74,3 +74,26 @@ def test_items_have_unique_ids(client):
     r1 = client.post("/items", json={"name": "x"})
     r2 = client.post("/items", json={"name": "y"})
     assert r1.json()["id"] != r2.json()["id"]
+
+
+# --- DELETE /items/{id} ---
+
+def test_delete_item(client):
+    item_id = client.post("/items", json={"name": "to-delete"}).json()["id"]
+    r = client.delete(f"/items/{item_id}")
+    assert r.status_code == 204
+    assert client.get("/items").json() == []
+
+
+def test_delete_nonexistent_item(client):
+    r = client.delete("/items/9999")
+    assert r.status_code == 404
+
+
+def test_delete_only_target_item(client):
+    id_a = client.post("/items", json={"name": "keep"}).json()["id"]
+    id_b = client.post("/items", json={"name": "remove"}).json()["id"]
+    client.delete(f"/items/{id_b}")
+    items = client.get("/items").json()
+    assert len(items) == 1
+    assert items[0]["id"] == id_a
