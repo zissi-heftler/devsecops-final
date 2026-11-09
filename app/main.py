@@ -1,7 +1,7 @@
 import os
 import sqlite3
 from contextlib import contextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, Response
 from pydantic import BaseModel
 
 app = FastAPI(title="items-api")
@@ -56,3 +56,12 @@ def create_item(item: ItemIn):
     with get_conn() as conn:
         cur = conn.execute("INSERT INTO items (name) VALUES (?)", (item.name,))
         return {"id": cur.lastrowid, "name": item.name}
+
+
+@app.delete("/items/{item_id}", status_code=204)
+def delete_item(item_id: int):
+    with get_conn() as conn:
+        result = conn.execute("DELETE FROM items WHERE id = ?", (item_id,))
+    if result.rowcount == 0:
+        raise HTTPException(status_code=404, detail="item not found")
+    return Response(status_code=204)
