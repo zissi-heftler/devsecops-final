@@ -62,6 +62,6 @@ def create_item(item: ItemIn):
 def delete_item(item_id: int):
     with get_conn() as conn:
         result = conn.execute("DELETE FROM items WHERE id = ?", (item_id,))
-    if result.rowcount == 0:
-        raise HTTPException(status_code=404, detail="item not found")
+        if result.rowcount == 0:
+            raise HTTPException(status_code=404, detail="item not found")
     return Response(status_code=204)
