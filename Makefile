@@ -6,7 +6,6 @@ dev:
 test:
 	cd app && pytest --cov=. --cov-report=term-missing --cov-fail-under=70
 
-# TODO week-2: bootstrap (S3, ECR, IAM OIDC)
 bootstrap:
 	cd infra/bootstrap && terraform init && terraform apply
 

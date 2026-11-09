@@ -1,0 +1,7 @@
+# Copy to terraform.tfvars and fill in your values.
+# terraform.tfvars is git-ignored; never commit real values.
+
+aws_region  = "us-east-1"
+project     = "devsecops-final"
+github_org  = "your-github-username"
+github_repo = "your-repo-name"
