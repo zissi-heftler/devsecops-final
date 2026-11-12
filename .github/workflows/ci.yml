@@ -56,5 +56,20 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  # TODO week-2: Trivy container scan (after docker build is added)
-  # TODO week-3: Checkov IaC scan (after infra/bootstrap is added)
+  trivy:
+    name: Trivy container scan (block on critical CVE)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image
+        run: docker build -t devsecops-final:${{ github.sha }} .
+      - name: Run Trivy (CRITICAL — fail build)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: devsecops-final:${{ github.sha }}
+          format: table
+          exit-code: "1"
+          ignore-unfixed: true
+          severity: CRITICAL
+
+  # TODO week-3: Checkov IaC scan (after infra/cluster is added)
