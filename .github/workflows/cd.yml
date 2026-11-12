@@ -1,0 +1,74 @@
+name: CD
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - "deploy/**"   # ADR-0007: image tag commits must not re-trigger CD
+
+permissions:
+  id-token: write   # required for OIDC
+  contents: read
+
+jobs:
+  push:
+    name: Build, push to ECR, update staging tag
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # ── AWS auth (OIDC, CD role — ECR push + EKS) ───────────────────────────
+      # ADR-0014: CD role trusted on refs/heads/main only.
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.CD_ROLE_ARN }}
+          aws-region: us-east-1
+
+      # ── ECR login ────────────────────────────────────────────────────────────
+      - name: Log in to ECR
+        id: ecr-login
+        uses: aws-actions/amazon-ecr-login@v2
+
+      # ── Build and push ───────────────────────────────────────────────────────
+      - name: Set image tag
+        id: tag
+        run: echo "TAG=sha-$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push
+        env:
+          REGISTRY: ${{ secrets.ECR_REGISTRY }}
+          IMAGE: ${{ secrets.ECR_REGISTRY }}/devsecops-final:${{ steps.tag.outputs.TAG }}
+        run: |
+          docker build -t "$IMAGE" .
+          docker push "$IMAGE"
+          echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
+
+      # ── Update staging overlay (GitHub App token for ruleset bypass) ─────────
+      # ADR-0007: GITHUB_TOKEN cannot bypass the branch ruleset; use a GitHub App.
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.GH_APP_ID }}
+          private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
+
+      - name: Update staging image tag
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          REGISTRY: ${{ secrets.ECR_REGISTRY }}
+          TAG: ${{ steps.tag.outputs.TAG }}
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}"
+          git pull --rebase origin main
+
+          cd deploy/overlays/staging
+          kustomize edit set image "items-api=${REGISTRY}/devsecops-final:${TAG}"
+          cd -
+
+          git add deploy/overlays/staging/kustomization.yaml
+          git commit -m "chore: update staging image to ${TAG} [skip ci]"
+          git push origin main
