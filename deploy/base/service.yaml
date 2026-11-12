@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: items-api
+spec:
+  type: ClusterIP      # ADR-0012: expose via kubectl port-forward for demos
+  selector:
+    app: items-api
+  ports:
+    - port: 80
+      targetPort: 8000
