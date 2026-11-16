@@ -6,9 +6,9 @@ DevSecOps final project — Python FastAPI service deployed on AWS EKS via GitOp
 
 - **App**: FastAPI + SQLite (`/health`, `/items` CRUD)
 - **Container**: `python:3.12-slim`, non-root user
-- **CI/CD**: GitHub Actions (`ci.yml` on PR, `cd.yml` on merge)
+- **CI/CD**: GitHub Actions (`ci.yml` on PR + push, `cd.yml` after CI succeeds on main)
 - **IaC**: Terraform (S3 state, ECR, EKS, Argo CD)
-- **GitOps**: Argo CD + Kustomize overlays (staging / production)
+- **GitOps**: Argo CD + Kustomize overlays (dev / production)
 - **Security gates**: Bandit (HIGH) · pip-audit · Gitleaks · Trivy · Checkov
 
 ## Security demo
@@ -25,7 +25,7 @@ DevSecOps final project — Python FastAPI service deployed on AWS EKS via GitOp
 
 ```bash
 make dev        # run app with hot-reload
-make test       # pytest + 70% coverage gate
+make test       # pytest + 80% coverage gate
 ```
 
 ## Repo layout
@@ -33,12 +33,12 @@ make test       # pytest + 70% coverage gate
 ```
 app/                    # FastAPI source + tests
 deploy/base/            # Kubernetes Deployment + ClusterIP Service
-deploy/overlays/        # staging + production Kustomize overlays
+deploy/overlays/        # dev + production Kustomize overlays
 infra/bootstrap/        # S3 state bucket, ECR, IAM OIDC — run once
 infra/cluster/          # EKS + node group + Argo CD — run each session
 .github/workflows/
-  ci.yml                # on PR: lint, test, Bandit, pip-audit, Gitleaks, Trivy, Checkov
-  cd.yml                # on merge: ECR push + image tag update + Argo CD auto-sync
+  ci.yml                # on PR + push to main: test, Bandit, pip-audit, Gitleaks, Trivy, Checkov; build-push to ECR on main only
+  cd.yml                # after CI succeeds on main: update dev image tag; Argo CD auto-syncs
 Dockerfile
 Makefile                # make bootstrap / make up / make down
 ```
