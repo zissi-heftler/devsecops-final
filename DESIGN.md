@@ -96,12 +96,12 @@ _2026-11-06 · Zissi Heftler_
 
 ---
 
-### ADR-0009 — PR-based production promotion; `git revert` rollback
+### ADR-0009 — Automated production promotion via e2e gate; `git revert` rollback
 
 **Status:** Accepted  
-**Context:** Need a promotion path from staging to production and a rollback mechanism that fits a GitOps model.  
-**Decision:** Promote by opening a PR that updates `deploy/overlays/production/kustomization.yaml` to the new image tag; second-account reviewer approves; merge triggers Argo CD auto-sync. Roll back by running `git revert` on the image tag commit; Argo CD syncs the previous tag automatically.  
-**Consequences:** Every production change has a PR, a review, and a full audit trail. Rollback is a commit, not an imperative command. Argo CD UI "rollback" button also available as a demo shortcut.
+**Context:** Production promotion needs a gate that is both meaningful and automated. A PR-based flow with a manual reviewer adds friction without safety if no actual manual testing is performed.  
+**Decision:** `cd.yml` runs two jobs in sequence after CI passes on `main`. `deploy-dev` updates `deploy/overlays/dev/`, commits the overlay (GitHub App token, `[skip ci]`), waits for Argo CD to report sync+healthy via `kubectl rollout status` (using the CD role's OIDC — no stored Argo CD token), then runs e2e smoke tests against the live dev cluster via `kubectl port-forward`. Only if all e2e tests pass does `deploy-prod` run, which updates `deploy/overlays/production/` and lets Argo CD auto-sync production. Roll back by running `git revert` on the overlay commit; Argo CD syncs the previous tag automatically for the affected environment.  
+**Consequences:** E2e tests are the real production gate — not documentation. Production only receives builds proven to work in dev. No second GitHub account. No stored Argo CD token; `kubectl rollout status` replaces `argocd app wait` and survives cluster recreation without secret rotation.
 
 ---
 
@@ -109,8 +109,8 @@ _2026-11-06 · Zissi Heftler_
 
 **Status:** Accepted  
 **Context:** Need security checks covering code, dependencies, secrets, container images, and IaC — without overloading the pipeline.  
-**Decision:** Bandit (Python SAST — block on HIGH), pip-audit (SCA — block on critical CVE), Gitleaks (secrets — block on any), **Trivy (container CVEs — block on critical, runs in `ci.yml` after `docker build`, pre-merge so the PR cannot merge if a critical CVE is found)**, Checkov (Terraform + Dockerfile IaC). Plus GitHub secret scanning + push protection and Dependabot. The image is built in CI for scanning but only pushed to ECR in `cd.yml` after merge.  
-**Consequences:** Trivy pre-merge prevents a vulnerable image from ever reaching ECR. Each tool has a single clear job. All five have maintained GitHub Actions integrations.
+**Decision:** Bandit (Python SAST — block on HIGH), pip-audit (SCA — block on critical CVE), Gitleaks (secrets — block on any), **Trivy (container CVEs — block on critical, runs in `ci.yml` after `docker build` — pre-merge on PRs, pre-push on main)**, Checkov (Terraform + Dockerfile IaC). Plus GitHub secret scanning + push protection and Dependabot. All five gates run in `ci.yml`. The `build-push` job (ECR push, CD role, main only) is the final job in `ci.yml` and only runs after all five gates pass. `cd.yml` deploys the already-pushed image — it never builds.  
+**Consequences:** Trivy runs before any image reaches ECR. Each tool has a single clear job. Build-once: the image that passed all gates is the exact image deployed to both dev and production.
 
 ---
 
@@ -169,7 +169,7 @@ _2026-11-06 · Zissi Heftler_
 | Helm chart | A packaged Kubernetes application. Installed with the Helm CLI or Terraform's `helm_release` resource. |
 | Kustomize | Kubernetes config tool that layers environment-specific patches (overlays) on shared base manifests. No templating. |
 | OIDC (GitHub–AWS) | Trust protocol. GitHub Actions proves its identity to AWS with a short-lived signed token. No stored credentials. |
-| Overlay | A Kustomize directory that patches base manifests for one environment (staging, production). |
+| Overlay | A Kustomize directory that patches base manifests for one environment (dev, production). |
 | pip-audit | Checks Python dependencies against the OSV vulnerability database. Finds CVEs in installed packages. |
 | Remote state | Terraform state stored in S3 so any machine or CI runner can share it without overwriting each other. |
 | Ruleset bypass list | A GitHub branch ruleset setting that lets specified actors (GitHub Apps, users) push to main without meeting the normal review or CI requirements. |
@@ -229,14 +229,14 @@ repo/
 ├── deploy/
 │   ├── base/            # Kubernetes Deployment + ClusterIP Service
 │   └── overlays/
-│       ├── staging/     # image tag patch, namespace: staging
+│       ├── dev/         # image tag patch, namespace: dev
 │       └── production/  # image tag patch, namespace: production
 ├── infra/
 │   ├── bootstrap/       # S3 state (use_lockfile), ECR, IAM OIDC — run once
 │   └── cluster/         # EKS, t3.medium node group, Argo CD helm_release — each session
 ├── .github/workflows/
-│   ├── ci.yml           # on PR: lint + test + Bandit (HIGH) + pip-audit + Gitleaks + Checkov + docker build + Trivy
-│   └── cd.yml           # on merge: ECR push (CD role) + tag update (GitHub App) + Argo CD auto-sync
+│   ├── ci.yml           # on push/PR: test + security gates + docker build + Trivy; build-push to ECR on main only (CD role)
+│   └── cd.yml           # on ci.yml success (main): deploy-dev → e2e tests → deploy-prod
 ├── Dockerfile           # python:3.12-slim, non-root user
 ├── Makefile             # make bootstrap / make up / make down (2-step teardown)
 └── README.md
@@ -244,21 +244,21 @@ repo/
 
 ### CI/CD flow
 
-**PR opened →** `ci.yml`: lint, test (pytest, 70% coverage), Bandit (HIGH), pip-audit, Gitleaks, Checkov, docker build + Trivy scan on local image (block on critical CVE). Second GitHub account approves. Merge.
+**PR opened →** `ci.yml`: test (pytest, 80% coverage), Bandit (HIGH), pip-audit, Gitleaks, Checkov, docker build + Trivy scan on local image (block on critical CVE). PR reviewed and merged.
 
-**Push to main →** `cd.yml`: docker build + push to ECR (OIDC, CD role), `kustomize edit set image` updates `deploy/overlays/staging/`, commits to main (GitHub App token, ruleset bypass), Argo CD auto-syncs staging within seconds.
+**Push to main →** `ci.yml` completes all checks, then `build-push` job pushes image to ECR (OIDC, CD role, tagged `sha-$(git rev-parse HEAD)`). `cd.yml` triggers when `ci.yml` succeeds:
+1. `deploy-dev`: `kustomize edit set image` updates `deploy/overlays/dev/`, commits (GitHub App token, `[skip ci]`), Argo CD auto-syncs dev, `kubectl rollout status` confirms healthy, e2e smoke tests pass.
+2. `deploy-prod` (only if `deploy-dev` passes): updates `deploy/overlays/production/`, Argo CD auto-syncs production.
 
-**Promote to production →** Manual PR updating `deploy/overlays/production/` image tag. Second account reviews. Merge. Argo CD auto-syncs prod.
-
-**Rollback →** `git revert` the image tag commit. Push. Argo CD syncs the previous tag automatically.
+**Rollback →** `git revert` the image tag overlay commit. Push. Argo CD syncs the previous tag automatically for the affected environment.
 
 ### Security demo plan
 
 | Act | What you plant | Tool that catches it | Gate result |
 |-----|---------------|---------------------|-------------|
 | 1 | AWS secret key in a file | Gitleaks + GitHub push protection | PR blocked |
-| 2 | Known-CVE Python package | Trivy (post-push image scan) | CD pipeline blocked |
-| 3 | String-concatenated SQL query | Bandit (pre-merge SAST) | Finding flagged; intentional, documented |
+| 2 | Known-CVE Python package | Trivy (pre-merge, local image — never reaches ECR) | PR blocked |
+| 3 | String-concatenated SQL query | Bandit (pre-merge SAST) | PR blocked |
 
 ### All decisions
 
@@ -268,17 +268,17 @@ repo/
 | Kubernetes | EKS, t3.medium node, Terraform-managed, destroy-after-session | ADR-0001 |
 | Service exposure | ClusterIP; demo via `kubectl port-forward`; `make down` deletes Argo CD apps before `terraform destroy` | ADR-0012 |
 | Repo structure | Monorepo: app/ + deploy/ | ADR-0002 |
-| Branching | GitHub Flow; main protected via ruleset; second GitHub account as reviewer | ADR-0003 |
+| Branching | GitHub Flow; main protected via ruleset; second GitHub account as PR reviewer | ADR-0003 |
 | Container | python:3.12-slim, non-root user, pinned deps, explicit EXPOSE | ADR-0013 |
 | Auth (OIDC) | Two scoped IAM roles: CI (ECR read, on pull_request) + CD (ECR write + EKS, on main push) | ADR-0014 |
 | IaC | Terraform; S3 backend with use_lockfile (≥ 1.10); bootstrap/ once + cluster/ each session | ADR-0011 |
 | GitOps engine | Argo CD via Terraform helm_release; restored by terraform apply | ADR-0008 |
-| Config | Kustomize overlays; staging auto-syncs; production promotes via PR | ADR-0009 |
+| Config | Kustomize overlays; dev auto-syncs; production auto-promotes after e2e gate | ADR-0009 |
 | Security gates | Block on critical CVEs and high-severity Bandit findings; annotate medium | ADR-0004 |
 | Security tools | Bandit (HIGH) + pip-audit + Gitleaks + Trivy (ci.yml, pre-merge) + Checkov + secret scanning + Dependabot | ADR-0010 |
 | Image tag update | GitHub App on ruleset bypass list; paths-ignore: deploy/** on ci.yml prevents loop | ADR-0007 |
 | Monitoring | kubectl top + AWS Budgets alert (week 1, never cut) + Argo CD UI | ADR-0005 |
-| Tests | pytest + FastAPI TestClient + pytest-cov; 70% minimum enforced in CI | — |
+| Tests | pytest + FastAPI TestClient + pytest-cov; 80% minimum enforced in CI | — |
 | Image tag format | sha-$(git rev-parse --short HEAD) | — |
 | VPC | AWS default VPC | — |
 
@@ -286,11 +286,11 @@ repo/
 
 | Week | Focus | Signal that it went wrong |
 |------|-------|--------------------------|
-| 1 | App + Dockerfile (hardened) + pytest + ci.yml: Gitleaks, Bandit (HIGH), pip-audit + AWS Budgets alert | App does not run in Docker; CI does not block a test secret |
-| 2 | bootstrap/ Terraform (S3, ECR, IAM OIDC scoped roles) + cd.yml ECR push + Trivy added to ci.yml | Image not in ECR after a merged PR; Trivy not blocking a test CVE |
-| 3 | cluster/ Terraform + make up / make down (2-step) + Checkov in ci.yml **(high risk)** | No working EKS cluster by end of week → trigger cut list |
-| 4 | Kustomize overlays + Argo CD app (ClusterIP) + cd.yml GitOps loop + port-forward | Merge to main does not auto-sync staging |
-| 5 | Three-act demo + production promotion PR + rollback demo + README | Demo cannot be recorded end-to-end |
+| 1 | App + Dockerfile (hardened) + pytest (80%) + ci.yml: Gitleaks, Bandit (HIGH), pip-audit + AWS Budgets alert | App does not run in Docker; CI does not block a test secret |
+| 2 | bootstrap/ Terraform (S3, ECR, IAM OIDC scoped roles) + ci.yml build-push (CD role, main only) + Trivy + Checkov | Image not in ECR after a merge to main; Trivy not blocking a test CVE |
+| 3 | cluster/ Terraform + make up / make down (2-step) + Argo CD bootstrap **(high risk)** | No working EKS cluster by end of week → trigger cut list |
+| 4 | Kustomize overlays + Argo CD app (ClusterIP) + cd.yml: deploy-dev + kubectl rollout status + port-forward | Merge to main does not auto-sync dev |
+| 5 | cd.yml e2e smoke tests + deploy-prod job + three-act demo + rollback demo + README | E2e tests do not pass; deploy-prod does not trigger; demo cannot be recorded end-to-end |
 | 6 | Polish + presentation prep | — |
 | 7 | Buffer: fix slippage; if ahead, add monitoring stretch items | — |
 
