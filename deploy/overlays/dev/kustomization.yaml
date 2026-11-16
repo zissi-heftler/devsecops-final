@@ -8,5 +8,5 @@ resources:
 
 images:
 - name: items-api
-  newName: 104402277595.dkr.ecr.us-east-1.amazonaws.com/devsecops-final/devsecops-final
-  newTag: sha-6205c63
+  newName: 104402277595.dkr.ecr.us-east-1.amazonaws.com/devsecops-final
+  newTag: sha-5f49bbd
