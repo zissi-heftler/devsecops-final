@@ -99,7 +99,7 @@ data "aws_iam_policy_document" "ci_assume" {
     condition {
       test     = "StringLike"
       variable = "token.actions.githubusercontent.com:sub"
-      values   = ["repo:${local.repo_ref}:pull_request"]
+      values   = ["repo:${var.github_org}@*/${var.github_repo}@*:pull_request"]
     }
 
     condition {
@@ -156,7 +156,7 @@ data "aws_iam_policy_document" "cd_assume" {
     condition {
       test     = "StringLike"
       variable = "token.actions.githubusercontent.com:sub"
-      values   = ["repo:${local.repo_ref}:ref:refs/heads/main"]
+      values   = ["repo:${var.github_org}@*/${var.github_repo}@*:ref:refs/heads/main"]
     }
 
     condition {
