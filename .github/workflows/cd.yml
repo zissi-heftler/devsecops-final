@@ -50,7 +50,7 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
           cd deploy/overlays/dev
-          kustomize edit set image "items-api=${{ secrets.ECR_REGISTRY }}/devsecops-final:${TAG}"
+          kustomize edit set image "items-api=${{ secrets.ECR_REGISTRY }}:${TAG}"
           cd -
 
           git add deploy/overlays/dev/kustomization.yaml

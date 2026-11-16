@@ -119,7 +119,7 @@ jobs:
 
       - name: Build and push
         env:
-          IMAGE: ${{ secrets.ECR_REGISTRY }}/devsecops-final:${{ steps.tag.outputs.TAG }}
+          IMAGE: ${{ secrets.ECR_REGISTRY }}:${{ steps.tag.outputs.TAG }}
         run: |
           docker build -t "$IMAGE" .
           docker push "$IMAGE"
