@@ -4,9 +4,9 @@ kind: Kustomization
 namespace: dev
 
 resources:
-  - ../../base
+- ../../base
 
 images:
-  - name: items-api
-    newName: placeholder   # cd.yml runs `kustomize edit set image` to replace this
-    newTag: latest
+- name: items-api
+  newName: 104402277595.dkr.ecr.us-east-1.amazonaws.com/devsecops-final/devsecops-final
+  newTag: sha-6205c63
