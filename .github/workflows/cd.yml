@@ -12,8 +12,8 @@ permissions:
   contents: read
 
 jobs:
-  deploy-staging:
-    name: Update staging image tag
+  deploy-dev:
+    name: Update dev image tag
     runs-on: ubuntu-latest
     # Only run when CI passed — skip silently on failure (ci.yml already reports it).
     if: github.event.workflow_run.conclusion == 'success'
@@ -39,7 +39,7 @@ jobs:
           app-id: ${{ secrets.GH_APP_ID }}
           private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
 
-      - name: Update staging image tag
+      - name: Update dev image tag
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           TAG: ${{ steps.tag.outputs.TAG }}
@@ -49,10 +49,10 @@ jobs:
           git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}"
           git pull --rebase origin main
 
-          cd deploy/overlays/staging
+          cd deploy/overlays/dev
           kustomize edit set image "items-api=${{ secrets.ECR_REGISTRY }}/devsecops-final:${TAG}"
           cd -
 
-          git add deploy/overlays/staging/kustomization.yaml
-          git commit -m "chore: update staging image to ${TAG} [skip ci]"
+          git add deploy/overlays/dev/kustomization.yaml
+          git commit -m "chore: update dev image to ${TAG} [skip ci]"
           git push origin main
