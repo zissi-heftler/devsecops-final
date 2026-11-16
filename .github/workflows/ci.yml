@@ -9,6 +9,10 @@ on:
       - "deploy/**"   # image tag commits from cd.yml must not re-trigger CI
   workflow_dispatch:
 
+permissions:
+  id-token: write   # required for OIDC (build-push job)
+  contents: read
+
 jobs:
   test:
     name: pytest (80% coverage)
@@ -85,3 +89,36 @@ jobs:
         run: checkov -f Dockerfile --framework dockerfile --config-file .checkov.yaml
       - name: Scan Terraform
         run: checkov -d infra/ --framework terraform --config-file .checkov.yaml
+
+  build-push:
+    name: Build and push to ECR (main only)
+    runs-on: ubuntu-latest
+    # ADR-0010: runs only after all five security gates pass.
+    # ADR-0014: CD role is trusted on refs/heads/main only — this job
+    #           never runs on PRs, so a PR-time workflow cannot push images.
+    needs: [test, bandit, pip-audit, gitleaks, trivy, checkov]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC — CD role)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.CD_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - name: Log in to ECR
+        id: ecr-login
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set image tag
+        id: tag
+        run: echo "TAG=sha-$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push
+        env:
+          IMAGE: ${{ secrets.ECR_REGISTRY }}/devsecops-final:${{ steps.tag.outputs.TAG }}
+        run: |
+          docker build -t "$IMAGE" .
+          docker push "$IMAGE"
