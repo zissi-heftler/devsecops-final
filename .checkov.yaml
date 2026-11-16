@@ -1,0 +1,14 @@
+skip-check:
+  # Dockerfile
+  - CKV_DOCKER_2    # HEALTHCHECK: replaced by K8s readinessProbe + livenessProbe
+                    # (see deploy/base/deployment.yaml)
+
+  # ECR
+  - CKV_AWS_136     # ECR KMS encryption: AWS-managed AES256 is sufficient (learning project)
+
+  # S3 state bucket
+  - CKV_AWS_144     # Cross-region replication: single-region project (ADR-0011)
+  - CKV_AWS_145     # KMS encryption: AES256 is sufficient (learning project)
+  - CKV_AWS_18      # Access logging: single-developer project, out of scope
+  - CKV2_AWS_61     # Lifecycle config: state bucket managed manually
+  - CKV2_AWS_62     # Event notifications: not needed for a Terraform state bucket
