@@ -196,7 +196,7 @@ _2026-11-06 · Zissi Heftler_
 
 **Cut order if behind (drop from top first):**
 
-1. Production namespace + promotion flow — keep staging only; course does not require two environments
+1. Production namespace + promotion flow — keep dev only; course does not require two environments
 2. Checkov — security story holds with four tools; Trivy + Gitleaks + Bandit + pip-audit still cover three layers
 3. pytest-cov threshold — keep tests, drop the coverage gate enforcement; tests still run and block on failure
 4. Kustomize overlays — use a flat `deploy/` manifest set; Argo CD GitOps story still works
@@ -229,7 +229,7 @@ repo/
 ├── deploy/
 │   ├── base/            # Kubernetes Deployment + ClusterIP Service
 │   └── overlays/
-│       ├── dev/         # image tag patch, namespace: dev
+│       ├── dev/         # image tag patch, namespace: dev — updated by cd.yml after CI passes
 │       └── production/  # image tag patch, namespace: production
 ├── infra/
 │   ├── bootstrap/       # S3 state (use_lockfile), ECR, IAM OIDC — run once
