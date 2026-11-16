@@ -11,7 +11,7 @@ on:
 
 jobs:
   test:
-    name: pytest (70% coverage)
+    name: pytest (80% coverage)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -20,7 +20,7 @@ jobs:
           python-version: "3.12"
       - run: pip install -r requirements-dev.txt
         working-directory: app
-      - run: pytest --cov=. --cov-report=term-missing --cov-fail-under=70
+      - run: pytest --cov=. --cov-report=term-missing --cov-fail-under=80
         working-directory: app
 
   bandit:
