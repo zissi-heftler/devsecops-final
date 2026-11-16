@@ -19,9 +19,20 @@ jobs:
     if: github.event.workflow_run.conclusion == 'success'
 
     steps:
+      # ADR-0007: generate App token BEFORE checkout so actions/checkout
+      # configures git with the App's identity — not the default GITHUB_TOKEN.
+      # This ensures git push uses the App (which is on the ruleset bypass list).
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.GH_APP_ID }}
+          private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
+
       - uses: actions/checkout@v4
         with:
           ref: main
+          token: ${{ steps.app-token.outputs.token }}
 
       # Reconstruct the same tag that ci.yml's build-push job used.
       # git rev-parse --short HEAD defaults to 7 chars; cut -c1-7 matches that.
@@ -31,23 +42,12 @@ jobs:
           SHORT_SHA=$(echo "${{ github.event.workflow_run.head_sha }}" | cut -c1-7)
           echo "TAG=sha-${SHORT_SHA}" >> "$GITHUB_OUTPUT"
 
-      # ADR-0007: GITHUB_TOKEN cannot bypass the branch ruleset; use a GitHub App.
-      - name: Generate GitHub App token
-        id: app-token
-        uses: actions/create-github-app-token@v1
-        with:
-          app-id: ${{ secrets.GH_APP_ID }}
-          private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
-
       - name: Update dev image tag
         env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
           TAG: ${{ steps.tag.outputs.TAG }}
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}"
-          git pull --rebase origin main
 
           cd deploy/overlays/dev
           kustomize edit set image "items-api=${{ secrets.ECR_REGISTRY }}/devsecops-final:${TAG}"
