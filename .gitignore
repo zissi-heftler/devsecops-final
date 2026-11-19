@@ -8,7 +8,9 @@ htmlcov/
 .env
 .DS_Store
 .terraform/
+.terraform.lock.hcl
 *.tfstate
 *.tfstate.backup
 .tflock
 *.tfvars
+.venv/
