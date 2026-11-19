@@ -9,4 +9,4 @@ resources:
 images:
 - name: items-api
   newName: 104402277595.dkr.ecr.us-east-1.amazonaws.com/devsecops-final
-  newTag: sha-697b4c5
+  newTag: sha-daf8daa
