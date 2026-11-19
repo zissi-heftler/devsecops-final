@@ -141,24 +141,31 @@ resource "aws_eks_access_policy_association" "cd_admin" {
 }
 
 # ── Helm and kubectl providers (after cluster exists) ─────────────────────────
-
-data "aws_eks_cluster_auth" "main" {
-  name = aws_eks_cluster.main.name
-}
+# Use exec instead of a static token: aws_eks_cluster_auth fetches the token at
+# plan time and it expires before the helm/kubectl resources run after the
+# ~10 min cluster creation.  exec calls `aws eks get-token` fresh at connect time.
 
 provider "helm" {
   kubernetes {
     host                   = aws_eks_cluster.main.endpoint
     cluster_ca_certificate = base64decode(aws_eks_cluster.main.certificate_authority[0].data)
-    token                  = data.aws_eks_cluster_auth.main.token
+    exec {
+      api_version = "client.authentication.k8s.io/v1beta1"
+      command     = "aws"
+      args        = ["eks", "get-token", "--cluster-name", aws_eks_cluster.main.name, "--region", var.aws_region]
+    }
   }
 }
 
 provider "kubectl" {
   host                   = aws_eks_cluster.main.endpoint
   cluster_ca_certificate = base64decode(aws_eks_cluster.main.certificate_authority[0].data)
-  token                  = data.aws_eks_cluster_auth.main.token
   load_config_file       = false
+  exec {
+    api_version = "client.authentication.k8s.io/v1beta1"
+    command     = "aws"
+    args        = ["eks", "get-token", "--cluster-name", aws_eks_cluster.main.name, "--region", var.aws_region]
+  }
 }
 
 # ── Namespaces ────────────────────────────────────────────────────────────────
