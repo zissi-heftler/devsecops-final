@@ -40,7 +40,11 @@ resource "aws_eks_cluster" "main" {
   }
 
   access_config {
-    authentication_mode = "API"
+    authentication_mode                         = "API"
+    # Automatically grant the IAM entity that runs terraform apply cluster-admin
+    # access via an access entry.  Without this, only explicitly added principals
+    # can reach the API — which blocks the helm and kubectl providers.
+    bootstrap_cluster_creator_admin_permissions = true
   }
 
   depends_on = [aws_iam_role_policy_attachment.cluster_policy]
