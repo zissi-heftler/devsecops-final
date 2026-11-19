@@ -12,3 +12,10 @@ skip-check:
   - CKV_AWS_18      # Access logging: single-developer project, out of scope
   - CKV2_AWS_61     # Lifecycle config: state bucket managed manually
   - CKV2_AWS_62     # Event notifications: not needed for a Terraform state bucket
+
+  # EKS cluster (infra/cluster/)
+  - CKV_AWS_58      # EKS secrets encryption: KMS overkill for a learning project
+  - CKV_AWS_37      # EKS control-plane logging: not needed for a single-session cluster
+  - CKV_AWS_38      # EKS public endpoint: required for GitHub Actions runners (no VPN)
+  - CKV_AWS_39      # EKS public endpoint: same as above
+  - CKV_AWS_341     # EKS endpoint public access: intentional (ADR-0001)
