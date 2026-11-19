@@ -1,0 +1,9 @@
+# Copy to terraform.tfvars and fill in your values.
+# terraform.tfvars is git-ignored; never commit real values.
+
+aws_region         = "us-east-1"
+project            = "devsecops-final"
+node_instance_type = "t3.medium"
+
+# Get this from: cd infra/bootstrap && terraform output cd_role_arn
+cd_role_arn = "arn:aws:iam::123456789012:role/devsecops-final-cd"
