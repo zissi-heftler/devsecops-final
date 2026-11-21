@@ -1,3 +1,4 @@
 fastapi==0.162.2
 uvicorn==0.32.1
 pydantic==2.10.1
+PyYAML==5.1     # demo: CVE-2020-14343 (Critical 9.8) — triggers Trivy + pip-audit (Act 2 — never merge)
