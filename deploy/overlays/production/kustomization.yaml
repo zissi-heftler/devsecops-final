@@ -4,9 +4,9 @@ kind: Kustomization
 namespace: production
 
 resources:
-  - ../../base
+- ../../base
 
 images:
-  - name: items-api
-    newName: placeholder   # updated manually via promotion PR (ADR-0009)
-    newTag: latest
+- name: items-api
+  newName: 104402277595.dkr.ecr.us-east-1.amazonaws.com/devsecops-final
+  newTag: sha-44d93af
