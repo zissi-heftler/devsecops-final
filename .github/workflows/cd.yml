@@ -128,3 +128,58 @@ jobs:
           sleep 3
           pytest app/tests/test_e2e.py -v -m e2e
           kill $PF_PID 2>/dev/null || true
+
+  deploy-prod:
+    name: Promote to production
+    runs-on: ubuntu-latest
+    # ADR-0009: production only receives builds proven healthy in dev.
+    # needs: deploy-dev ensures e2e gate was the last thing that passed.
+    needs: deploy-dev
+    permissions:
+      contents: read
+
+    steps:
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.GH_APP_ID }}
+          private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
+
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          token: ${{ steps.app-token.outputs.token }}
+
+      - name: Set image tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            if [ -n "${{ inputs.tag }}" ]; then
+              echo "TAG=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
+            else
+              TAG=$(grep 'newTag' deploy/overlays/production/kustomization.yaml | awk '{print $2}')
+              echo "TAG=${TAG}" >> "$GITHUB_OUTPUT"
+            fi
+          else
+            SHORT_SHA=$(echo "${{ github.event.workflow_run.head_sha }}" | cut -c1-7)
+            echo "TAG=sha-${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Promote image to production
+        env:
+          TAG: ${{ steps.tag.outputs.TAG }}
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Pull the dev overlay commit that deploy-dev just pushed.
+          git pull origin main
+
+          cd deploy/overlays/production
+          kustomize edit set image "items-api=${{ secrets.ECR_REGISTRY }}:${TAG}"
+          cd -
+
+          git add deploy/overlays/production/kustomization.yaml
+          git commit -m "chore: promote image to production ${TAG} [skip ci]"
+          git push origin main
