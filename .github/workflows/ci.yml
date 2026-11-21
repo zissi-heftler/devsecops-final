@@ -84,7 +84,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install checkov==3.2.447
+      - run: pip install checkov==3.4.6
       - name: Scan Dockerfile
         run: checkov -f Dockerfile --framework dockerfile --config-file .checkov.yaml
       - name: Scan Terraform
