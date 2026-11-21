@@ -58,6 +58,16 @@ def create_item(item: ItemIn):
         return {"id": cur.lastrowid, "name": item.name}
 
 
+# demo: intentional SQL injection — triggers Bandit HIGH (Act 3 — never merge)
+@app.get("/items/search")
+def search_items(q: str):
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT id, name FROM items WHERE name = '" + q + "'"
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
 @app.delete("/items/{item_id}", status_code=204)
 def delete_item(item_id: int):
     with get_conn() as conn:
