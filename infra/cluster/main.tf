@@ -31,7 +31,7 @@ data "aws_subnets" "default" {
 resource "aws_eks_cluster" "main" {
   name     = var.project
   role_arn = aws_iam_role.cluster.arn
-  version  = "1.31"
+  version  = "1.35"
 
   vpc_config {
     subnet_ids              = data.aws_subnets.default.ids
