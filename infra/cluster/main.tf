@@ -2,10 +2,6 @@
 
 data "aws_caller_identity" "current" {}
 
-data "aws_availability_zones" "available" {
-  state = "available"
-}
-
 # Use the default VPC and its subnets — ADR (see DESIGN.md)
 data "aws_vpc" "default" {
   default = true
