@@ -22,9 +22,15 @@ spec:
           image: items-api:latest   # overridden by Kustomize overlay
           ports:
             - containerPort: 8000
+          env:
+            - name: DB_PATH
+              value: /data/items.db
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
+          volumeMounts:
+            - name: data
+              mountPath: /data
           readinessProbe:
             httpGet:
               path: /health
@@ -37,3 +43,6 @@ spec:
               port: 8000
             initialDelaySeconds: 10
             periodSeconds: 30
+      volumes:
+        - name: data
+          emptyDir: {}
