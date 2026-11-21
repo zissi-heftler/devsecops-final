@@ -7,6 +7,11 @@ on:
     workflows: ["CI"]
     types: [completed]
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Image tag to deploy (e.g. sha-e3293bc). Defaults to current deploy/overlays/dev tag."
+        required: false
 
 permissions:
   contents: read
@@ -15,8 +20,8 @@ jobs:
   deploy-dev:
     name: Deploy to dev
     runs-on: ubuntu-latest
-    # Only run when CI passed — skip silently on failure (ci.yml already reports it).
-    if: github.event.workflow_run.conclusion == 'success'
+    # Run when CI passed, or when triggered manually via workflow_dispatch.
+    if: github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch'
     permissions:
       id-token: write   # OIDC for AWS (kubectl rollout status — ADR-0014)
       contents: read
@@ -37,13 +42,23 @@ jobs:
           ref: main
           token: ${{ steps.app-token.outputs.token }}
 
-      # Reconstruct the same tag that ci.yml's build-push job used.
-      # git rev-parse --short HEAD defaults to 7 chars; cut -c1-7 matches that.
+      # workflow_dispatch: use the explicit input tag if provided, otherwise
+      # re-use whatever tag is already in the dev overlay (no-op redeploy).
+      # workflow_run: reconstruct the tag from the triggering CI commit SHA.
       - name: Set image tag
         id: tag
         run: |
-          SHORT_SHA=$(echo "${{ github.event.workflow_run.head_sha }}" | cut -c1-7)
-          echo "TAG=sha-${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            if [ -n "${{ inputs.tag }}" ]; then
+              echo "TAG=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
+            else
+              TAG=$(grep 'newTag' deploy/overlays/dev/kustomization.yaml | awk '{print $2}')
+              echo "TAG=${TAG}" >> "$GITHUB_OUTPUT"
+            fi
+          else
+            SHORT_SHA=$(echo "${{ github.event.workflow_run.head_sha }}" | cut -c1-7)
+            echo "TAG=sha-${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Update dev image tag
         env:
