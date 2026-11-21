@@ -13,10 +13,13 @@ permissions:
 
 jobs:
   deploy-dev:
-    name: Update dev image tag
+    name: Deploy to dev
     runs-on: ubuntu-latest
     # Only run when CI passed — skip silently on failure (ci.yml already reports it).
     if: github.event.workflow_run.conclusion == 'success'
+    permissions:
+      id-token: write   # OIDC for AWS (kubectl rollout status — ADR-0014)
+      contents: read
 
     steps:
       # ADR-0007: generate App token BEFORE checkout so actions/checkout
@@ -56,3 +59,40 @@ jobs:
           git add deploy/overlays/dev/kustomization.yaml
           git commit -m "chore: update dev image to ${TAG} [skip ci]"
           git push origin main
+
+      - name: Configure AWS credentials (OIDC — CD role)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.CD_ROLE_ARN }}
+          aws-region: us-east-1
+          audience: sts.amazonaws.com
+
+      - name: Wire kubectl to EKS
+        run: aws eks update-kubeconfig --region us-east-1 --name devsecops-final
+
+      # ADR-0009: poll until Argo CD has synced the exact overlay commit we just
+      # pushed — not just any Synced state (which could be the previous commit).
+      # 30 × 10 s = 5 min; covers Argo CD's default 3-minute polling interval.
+      - name: Wait for Argo CD to sync the new commit
+        run: |
+          PUSH_SHA=$(git rev-parse HEAD)
+          echo "Waiting for Argo CD to sync to ${PUSH_SHA}"
+          for i in $(seq 1 30); do
+            SYNCED_SHA=$(kubectl get application/items-api-dev -n argocd \
+              -o jsonpath='{.status.sync.revision}' 2>/dev/null || echo "")
+            STATUS=$(kubectl get application/items-api-dev -n argocd \
+              -o jsonpath='{.status.sync.status}' 2>/dev/null || echo "")
+            if [ "$SYNCED_SHA" = "$PUSH_SHA" ] && [ "$STATUS" = "Synced" ]; then
+              echo "Synced."
+              break
+            fi
+            if [ "$i" -eq 30 ]; then
+              echo "Timed out (synced=${SYNCED_SHA:-none}, want=${PUSH_SHA})"
+              exit 1
+            fi
+            echo "  attempt ${i}/30: revision=${SYNCED_SHA:-none} status=${STATUS:-unknown}"
+            sleep 10
+          done
+
+      - name: Wait for dev rollout to be healthy
+        run: kubectl rollout status deployment/items-api -n dev --timeout=3m
