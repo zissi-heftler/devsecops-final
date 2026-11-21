@@ -111,3 +111,20 @@ jobs:
 
       - name: Wait for dev rollout to be healthy
         run: kubectl rollout status deployment/items-api -n dev --timeout=3m
+
+      # ADR-0009: e2e gate — only promote to production if smoke tests pass.
+      - name: Set up Python for e2e tests
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install e2e test dependencies
+        run: pip install -r app/requirements-dev.txt
+
+      - name: Run e2e smoke tests
+        run: |
+          kubectl port-forward svc/items-api -n dev 8080:80 &
+          PF_PID=$!
+          sleep 3
+          pytest app/tests/test_e2e.py -v -m e2e
+          kill $PF_PID 2>/dev/null || true
