@@ -1,4 +1,4 @@
 fastapi==0.162.2
 uvicorn==0.32.1
 pydantic==2.10.1
-Pillow==5.4.1   # demo: CVE-2020-5312 / CVE-2020-5313 (Critical) — triggers Trivy (Act 2 — never merge)
+Jinja2==2.9.0   # demo: CVE-2016-10745 (Critical 10.0) — triggers Trivy + pip-audit (Act 2 — never merge)
