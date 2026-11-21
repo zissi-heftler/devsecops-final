@@ -123,3 +123,28 @@ jobs:
         run: |
           docker build -t "$IMAGE" .
           docker push "$IMAGE"
+
+      # Generate an SPDX SBOM from the image that was just pushed.
+      # anchore/sbom-action scans the local Docker image (still in daemon cache)
+      # and uploads the SBOM as a workflow artifact.
+      - name: Generate SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          image: ${{ secrets.ECR_REGISTRY }}:${{ steps.tag.outputs.TAG }}
+          format: spdx-json
+          artifact-name: sbom-${{ steps.tag.outputs.TAG }}.spdx.json
+
+      # Keyless cosign signing — no stored key.
+      # cosign uses the GitHub Actions OIDC token to get a short-lived cert from
+      # Sigstore Fulcio. The signature + cert are stored in ECR as a separate OCI
+      # artifact (tag: sha256-<digest>.sig). Verify with:
+      #   cosign verify --certificate-identity <workflow-url> \
+      #     --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+      #     <image>
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Sign image (keyless OIDC)
+        env:
+          IMAGE: ${{ secrets.ECR_REGISTRY }}:${{ steps.tag.outputs.TAG }}
+        run: cosign sign --yes "$IMAGE"
