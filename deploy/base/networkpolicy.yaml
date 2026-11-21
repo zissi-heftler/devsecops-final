@@ -1,0 +1,25 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: items-api
+spec:
+  podSelector:
+    matchLabels:
+      app: items-api
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Allow inbound traffic on port 8000 only from pods in the same namespace.
+    # Kubelet health probes (readiness/liveness) originate from the node and
+    # bypass NetworkPolicy, so no special rule is needed for them.
+    - from:
+        - podSelector: {}
+      ports:
+        - port: 8000
+          protocol: TCP
+  egress:
+    # Allow all egress — the app only uses local SQLite (emptyDir) and makes
+    # no outbound network calls.  Keeping this open avoids blocking unexpected
+    # cluster-internal traffic (e.g. DNS).
+    - {}
