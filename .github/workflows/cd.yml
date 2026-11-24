@@ -32,12 +32,12 @@ jobs:
       # This ensures git push uses the App (which is on the ruleset bypass list).
       - name: Generate GitHub App token
         id: app-token
-        uses: actions/create-github-app-token@v1
+        uses: actions/create-github-app-token@v3.4.0
         with:
           app-id: ${{ secrets.GH_APP_ID }}
           private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7.0.1
         with:
           ref: main
           token: ${{ steps.app-token.outputs.token }}
@@ -76,7 +76,7 @@ jobs:
           git push origin main
 
       - name: Configure AWS credentials (OIDC — CD role)
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v6.3.0
         with:
           role-to-assume: ${{ secrets.CD_ROLE_ARN }}
           aws-region: us-east-1
@@ -114,7 +114,7 @@ jobs:
 
       # ADR-0009: e2e gate — only promote to production if smoke tests pass.
       - name: Set up Python for e2e tests
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7.1.0
         with:
           python-version: "3.12"
 
@@ -141,12 +141,12 @@ jobs:
     steps:
       - name: Generate GitHub App token
         id: app-token
-        uses: actions/create-github-app-token@v1
+        uses: actions/create-github-app-token@v3.4.0
         with:
           app-id: ${{ secrets.GH_APP_ID }}
           private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7.0.1
         with:
           ref: main
           token: ${{ steps.app-token.outputs.token }}
